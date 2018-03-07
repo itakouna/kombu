@@ -34,6 +34,7 @@ TRANSPORT_ALIASES = {
     'slmq': 'kombu.transport.SLMQ.Transport',
     'filesystem': 'kombu.transport.filesystem:Transport',
     'qpid': 'kombu.transport.qpid:Transport',
+    'pqpid': 'kombu.transport.pqpid:Transport',
     'sentinel': 'kombu.transport.redis:SentinelTransport',
     'consul': 'kombu.transport.consul:Transport',
     'etcd': 'kombu.transport.etcd:Transport',
