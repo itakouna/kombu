@@ -1,9 +1,11 @@
 from __future__ import absolute_import, unicode_literals
 
 from . import virtual, base
+from kombu.five import Empty
 
 import proton
 from proton.utils import BlockingConnection
+
 
 #
 # Required dependencies 
@@ -24,6 +26,7 @@ from proton.utils import BlockingConnection
 # pip install python-qpid-proton==0.20.0
 
 
+
 class Message(base.Message):
 
     def __init__(self, message, channel=None, **kwargs):
@@ -40,29 +43,32 @@ class Message(base.Message):
 
 
 class Channel(virtual.Channel):
-
+    _client = None
     Message = Message
 
+    @property
+    def client(self):
+        if self._client is None:
+            conninfo = self.connection.client
+            self._client = BlockingConnection(conninfo.hostname,timeout=None)
+        return self._client
+
     def _get(self, queue):
-        self.receiver = self._connection.create_receiver(queue)
-        message = self.receiver.receive(timeout=None)
-        self.receiver.accept()
-        self.receiver.close()
+        self.receiver = self.client.create_receiver(queue)
+        try:
+            message = self.receiver.receive(timeout=0.01)
+        except:
+            self.receiver.close()
+            raise Empty()
+        else:
+            self.receiver.accept()
+            self.receiver.close()
         return message
 
     def _put(self, queue, message, **kwargs):
-        self.sender = self._connection.create_sender(queue)
+        self.sender = self.client.create_sender(queue)
         self.sender.send(proton.Message(body=message))
         self.sender.close()
-
-    def _size(self, queue):
-        return 1
-
-    def _delete(self, queue, *args, **kwargs):
-        pass
-        
-    def _purge(self, queue):
-        pass
 
     def basic_publish(self, message, exchange, routing_key, **kwargs):
         if exchange:
@@ -71,20 +77,12 @@ class Channel(virtual.Channel):
             )
         return self._put(routing_key, message, **kwargs)
 
-    @property
-    def _connection(self):
-        # self.connection == transport
-        return self.connection.blocking_connection
-
 
 class Transport(virtual.Transport):
 
     Channel = Channel
+
     driver_type = 'pqpid'
     driver_name = 'pqpid'
 
-    @property
-    def blocking_connection(self):
-        conninfo = self.client
-        return BlockingConnection(conninfo.hostname, timeout=None)
 
