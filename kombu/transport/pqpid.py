@@ -30,6 +30,8 @@ from proton.utils import BlockingConnection
 class Message(base.Message):
 
     def __init__(self, message, channel=None, **kwargs):
+        if not isinstance(message.body, dict):
+            raise Empty()
         super(Message, self).__init__(
             body=message.body['body'],
             channel=channel,
@@ -44,31 +46,35 @@ class Message(base.Message):
 
 class Channel(virtual.Channel):
     _client = None
+    _timeout = 0.05
+    
     Message = Message
 
     @property
     def client(self):
-        if self._client is None:
+        if self._client is None or self._client.disconnected:
             conninfo = self.connection.client
-            self._client = BlockingConnection(conninfo.hostname,timeout=None)
+            self._client = BlockingConnection(conninfo.hostname, timeout=None)
         return self._client
 
     def _get(self, queue):
         self.receiver = self.client.create_receiver(queue)
         try:
-            message = self.receiver.receive(timeout=0.01)
+            message = self.receiver.receive(timeout=self._timeout)
         except:
-            self.receiver.close()
             raise Empty()
         else:
             self.receiver.accept()
+        finally:
             self.receiver.close()
         return message
 
     def _put(self, queue, message, **kwargs):
         self.sender = self.client.create_sender(queue)
-        self.sender.send(proton.Message(body=message))
-        self.sender.close()
+        try:
+            self.sender.send(proton.Message(body=message))
+        finally:
+            self.sender.close()
 
     def basic_publish(self, message, exchange, routing_key, **kwargs):
         if exchange:
